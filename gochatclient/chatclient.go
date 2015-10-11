@@ -2,14 +2,25 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
+	"log"
 	"net"
 	"os"
+	"time"
+
+	"github.com/eric-fouillet/gochat"
+	"github.com/golang/protobuf/proto"
 )
 
+// Chat client
+// Connect to the host and port given in parameters
+// and start reading from stdin some text to send
 func main() {
-	args := os.Args[1:]
-	addr, err := net.ResolveTCPAddr("tcp", string(args[0]+":"+args[1]))
+	host := flag.String("host", "localhost", "The host to connect to")
+	port := flag.String("port", "8083", "The port to connect to")
+	flag.Parse()
+	addr, err := net.ResolveTCPAddr("tcp", string(*host+":"+*port))
 	if err != nil {
 		fmt.Printf("Error while resolving address %#v", err)
 		return
@@ -29,12 +40,33 @@ func main() {
 			fmt.Printf("Error while reading from stdin %v\n", err3)
 			continue
 		}
-		fmt.Fprintf(conn, msg+"\n")
+		if msg == "exit\n" {
+			return
+		}
+		sender := "eric"
+		sendTime := uint64(time.Now().Unix())
+		strippedMsg := msg[:len(msg)-1]
+		protoMsg := &gochat.ChatMessage{
+			Sender:   &sender,
+			SendTime: &sendTime,
+			Content:  &strippedMsg,
+		}
+		data, err := proto.Marshal(protoMsg)
+		if err != nil {
+			log.Fatal("marshaling error: ", err)
+		}
+		_, errWrite := conn.Write(data)
+		if errWrite != nil {
+			fmt.Printf("Error while writing to remote ! %v\n", errWrite)
+			continue
+		}
+		//fmt.Fprintf(conn, data)
 		returnMsg, err4 := bufio.NewReader(conn).ReadString('\n')
 		if err4 != nil {
 			fmt.Printf("Error while reading from remote ! %v\n", err4)
 			continue
 		}
-		fmt.Printf("Received: %v\n", returnMsg)
+		returnStr := returnMsg[:len(returnMsg)-1]
+		fmt.Printf("Received: %v\n", returnStr)
 	}
 }

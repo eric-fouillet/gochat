@@ -5,8 +5,12 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"log"
 	"net"
 	"strings"
+
+	"github.com/eric-fouillet/gochat"
+	"github.com/golang/protobuf/proto"
 )
 
 // ChatMessage a message struct
@@ -62,17 +66,28 @@ func (cs *ChatServer) start(addr string, port string) (err error) {
 func handleConnection(conn net.Conn) {
 	//	reader := bufio.NewReader(conn)
 	for {
-		msg, _ := bufio.NewReader(conn).ReadString('\n')
-		fmt.Printf("Read: %v from %v\n", string(msg), conn.RemoteAddr().String())
-		newMsg := strings.ToUpper(msg)
+		buf := make([]byte, 1024)
+		_, err := bufio.NewReader(conn).Read(buf)
+		//ReadString('\n')
+		if err != nil {
+			fmt.Printf("lost connection with %v\n", conn.RemoteAddr())
+			return
+		}
+		receivedMsg := &gochat.ChatMessage{}
+		err2 := proto.Unmarshal(buf, receivedMsg)
+		if err2 != nil {
+			log.Fatal("unmarshaling error: ", err2)
+		}
+		fmt.Printf("Read: %v from %v on %v\n", receivedMsg.Content, receivedMsg.Sender, conn.RemoteAddr())
+		newMsg := strings.ToUpper(*receivedMsg.Content)
 		conn.Write([]byte(newMsg + "\n"))
 	}
 }
 
-func invertCase(s string) string {
-	content := []byte(s)
-
-}
+//func invertCase(s string) string {
+//	content := []byte(s)
+//
+//}
 
 func parseAddress(addr string, port string) (*net.TCPAddr, error) {
 	var addrBuf bytes.Buffer
@@ -87,7 +102,7 @@ func parseAddress(addr string, port string) (*net.TCPAddr, error) {
 }
 
 func main() {
-	host := flag.String("host", "", "The host to listen on")
+	host := flag.String("host", "localhost", "The host to listen on")
 	port := flag.String("port", "8083", "The port to listen on")
 	flag.Parse()
 	cs := ChatServer{}
