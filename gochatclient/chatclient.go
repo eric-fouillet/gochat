@@ -43,7 +43,7 @@ func main() {
 		if msg == "exit\n" {
 			return
 		}
-		sender := "eric"
+		sender := "someone"
 		sendTime := uint64(time.Now().Unix())
 		strippedMsg := msg[:len(msg)-1]
 		protoMsg := &gochat.ChatMessage{
@@ -68,5 +68,20 @@ func main() {
 		}
 		returnStr := returnMsg[:len(returnMsg)-1]
 		fmt.Printf("Received: %v\n", returnStr)
+	}
+
+}
+
+func checkError(err error, action string) {
+	if err != nil {
+		log.Fatal("Error %v\n", err)
+		switch action {
+		case "stop":
+			os.Exit(-1)
+		case "continue":
+			return
+		default:
+			return
+		}
 	}
 }

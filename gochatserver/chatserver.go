@@ -67,19 +67,19 @@ func handleConnection(conn net.Conn) {
 	//	reader := bufio.NewReader(conn)
 	for {
 		buf := make([]byte, 1024)
-		_, err := bufio.NewReader(conn).Read(buf)
-		//ReadString('\n')
+		readBytes, err := bufio.NewReader(conn).Read(buf)
+		//sz, err := binary.ReadVarint(input)
 		if err != nil {
 			fmt.Printf("lost connection with %v\n", conn.RemoteAddr())
 			return
 		}
-		receivedMsg := &gochat.ChatMessage{}
-		err2 := proto.Unmarshal(buf, receivedMsg)
+		var receivedMsg = new(gochat.ChatMessage)
+		err2 := proto.Unmarshal(buf[:readBytes], receivedMsg)
 		if err2 != nil {
 			log.Fatal("unmarshaling error: ", err2)
 		}
-		fmt.Printf("Read: %v from %v on %v\n", receivedMsg.Content, receivedMsg.Sender, conn.RemoteAddr())
-		newMsg := strings.ToUpper(*receivedMsg.Content)
+		fmt.Printf("Read: %v from %v on %v\n", receivedMsg.GetContent(), receivedMsg.GetSender(), conn.RemoteAddr())
+		newMsg := strings.ToUpper(receivedMsg.GetContent())
 		conn.Write([]byte(newMsg + "\n"))
 	}
 }
