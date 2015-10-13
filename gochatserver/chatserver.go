@@ -13,28 +13,6 @@ import (
 	"github.com/golang/protobuf/proto"
 )
 
-// ChatMessage a message struct
-// Contains the encoded message (protocol buffer)
-type ChatMessage struct {
-	content []byte
-	from    string
-	to      string
-}
-
-/*type ChatMessageStatus const (
-	OK = iota
-	NOK = iota
-)*/
-
-// ChatNode something
-type ChatNode struct {
-}
-
-/*func (n *ChatNode) send(msg ChatMessage) ChatMessageStatus {
-	// TODO
-	return ChatMessageStatus.OK
-}*/
-
 // ChatServer represents a chat server
 type ChatServer struct {
 	Address  *net.TCPAddr
@@ -58,13 +36,12 @@ func (cs *ChatServer) start(addr string, port string) (err error) {
 	for {
 		conn, _ := listener.Accept()
 		fmt.Printf("Accepted connection from %v !\n", conn.RemoteAddr().String())
-		//defer conn.Close()
 		go handleConnection(conn)
 	}
 }
 
 func handleConnection(conn net.Conn) {
-	//	reader := bufio.NewReader(conn)
+	defer conn.Close()
 	for {
 		buf := make([]byte, 1024)
 		readBytes, err := bufio.NewReader(conn).Read(buf)
@@ -83,11 +60,6 @@ func handleConnection(conn net.Conn) {
 		conn.Write([]byte(newMsg + "\n"))
 	}
 }
-
-//func invertCase(s string) string {
-//	content := []byte(s)
-//
-//}
 
 func parseAddress(addr string, port string) (*net.TCPAddr, error) {
 	var addrBuf bytes.Buffer

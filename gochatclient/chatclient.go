@@ -31,8 +31,6 @@ func main() {
 		return
 	}
 	defer conn.Close()
-	//readerStd := bufio.NewReader(os.Stdin)
-	//readerConn := bufio.NewReader(conn)
 	for {
 		fmt.Print("Enter text to send: ")
 		msg, err3 := bufio.NewReader(os.Stdin).ReadString('\n')
@@ -60,7 +58,6 @@ func main() {
 			fmt.Printf("Error while writing to remote ! %v\n", errWrite)
 			continue
 		}
-		//fmt.Fprintf(conn, data)
 		returnMsg, err4 := bufio.NewReader(conn).ReadString('\n')
 		if err4 != nil {
 			fmt.Printf("Error while reading from remote ! %v\n", err4)
