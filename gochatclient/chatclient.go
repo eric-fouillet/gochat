@@ -4,14 +4,21 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"time"
 
 	"github.com/eric-fouillet/gochat"
+	"github.com/eric-fouillet/gochat/gochatutil"
 	"github.com/golang/protobuf/proto"
 )
+
+// A chat client, holding a username, host and port
+type ChatClient struct {
+	Username   string
+	TargetHost string
+	TargetPort string
+}
 
 // Chat client
 // Connect to the host and port given in parameters
@@ -20,65 +27,68 @@ func main() {
 	host := flag.String("host", "localhost", "The host to connect to")
 	port := flag.String("port", "8083", "The port to connect to")
 	flag.Parse()
-	addr, err := net.ResolveTCPAddr("tcp", string(*host+":"+*port))
-	if err != nil {
-		fmt.Printf("Error while resolving address %#v", err)
+	fmt.Print("Enter your username: ")
+	username, errName := bufio.NewReader(os.Stdin).ReadString('\n')
+	if gochatutil.CheckError(errName) {
 		return
 	}
-	conn, err2 := net.DialTCP("tcp", nil, addr)
-	if err2 != nil {
-		fmt.Printf("Error while dialing TCP %#v", err2)
-		return
-	}
+	chatClient := ChatClient{username[:len(username)-1], *host, *port}
+	conn, _ := chatClient.Connect(*host, *port)
 	defer conn.Close()
 	for {
 		fmt.Print("Enter text to send: ")
 		msg, err3 := bufio.NewReader(os.Stdin).ReadString('\n')
-		if err3 != nil {
-			fmt.Printf("Error while reading from stdin %v\n", err3)
-			continue
+		if gochatutil.CheckError(err3) {
+			return
 		}
 		if msg == "exit\n" {
 			return
 		}
-		sender := "someone"
-		sendTime := uint64(time.Now().Unix())
-		strippedMsg := msg[:len(msg)-1]
-		protoMsg := &gochat.ChatMessage{
-			Sender:   &sender,
-			SendTime: &sendTime,
-			Content:  &strippedMsg,
-		}
-		data, err := proto.Marshal(protoMsg)
-		if err != nil {
-			log.Fatal("marshaling error: ", err)
-		}
-		_, errWrite := conn.Write(data)
-		if errWrite != nil {
-			fmt.Printf("Error while writing to remote ! %v\n", errWrite)
-			continue
-		}
-		returnMsg, err4 := bufio.NewReader(conn).ReadString('\n')
-		if err4 != nil {
-			fmt.Printf("Error while reading from remote ! %v\n", err4)
-			continue
-		}
-		returnStr := returnMsg[:len(returnMsg)-1]
-		fmt.Printf("Received: %v\n", returnStr)
+		chatClient.SendMessage(msg, conn)
+		chatClient.ReadResponse(conn)
 	}
-
 }
 
-func checkError(err error, action string) {
-	if err != nil {
-		log.Fatal("Error %v\n", err)
-		switch action {
-		case "stop":
-			os.Exit(-1)
-		case "continue":
-			return
-		default:
-			return
-		}
+func (cc *ChatClient) Connect(host string, port string) (net.Conn, error) {
+	addr, err := net.ResolveTCPAddr("tcp", string(host+":"+port))
+	if gochatutil.CheckError(err) {
+		return nil, err
 	}
+	conn, err2 := net.DialTCP("tcp", nil, addr)
+	if gochatutil.CheckError(err2) {
+		return nil, err2
+	}
+	return conn, nil
+}
+
+func (cc *ChatClient) SendMessage(msg string, conn net.Conn) {
+	sendTime := uint64(time.Now().Unix())
+	strippedMsg := msg[:len(msg)-1]
+	protoMsg := &gochat.ChatMessage{
+		Sender:   &cc.Username,
+		SendTime: &sendTime,
+		Content:  &strippedMsg,
+	}
+	data, err := proto.Marshal(protoMsg)
+	if gochatutil.CheckError(err) {
+		return
+	}
+	_, errWrite := conn.Write(data)
+	if gochatutil.CheckError(errWrite) {
+		return
+	}
+}
+
+func (cc *ChatClient) ReadResponse(conn net.Conn) {
+	buf := make([]byte, 1024)
+	readBytes, err := bufio.NewReader(conn).Read(buf)
+	if gochatutil.CheckError(err) {
+		return
+	}
+	var returnMsg = new(gochat.ChatMessage)
+	err2 := proto.Unmarshal(buf[:readBytes], returnMsg)
+	if gochatutil.CheckError(err2) {
+		return
+	}
+	fmt.Printf("Received: %v\n", returnMsg.GetContent())
 }

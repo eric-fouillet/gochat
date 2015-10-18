@@ -4,4 +4,5 @@ message ChatMessage {
 	required string sender = 1;
 	required uint64 send_time = 2;
 	required string content = 3;
+	optional string target = 4;
 }

@@ -5,11 +5,12 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"log"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/eric-fouillet/gochat"
+	"github.com/eric-fouillet/gochat/gochatutil"
 	"github.com/golang/protobuf/proto"
 )
 
@@ -18,46 +19,73 @@ type ChatServer struct {
 	Address  *net.TCPAddr
 	Name     string
 	BindAddr net.TCPAddr
+	Clients  []net.Conn
 }
 
 // Starts listening on the address and port given in parameters
 func (cs *ChatServer) start(addr string, port string) (err error) {
 	cs.Address, err = parseAddress(addr, port)
-	if err != nil {
-		fmt.Printf("Error while resolving address: <%v> from %v", err, cs.Address.String())
-		return err
-	}
+	gochatutil.CheckError(err)
 	listener, err2 := net.ListenTCP("tcp", cs.Address)
-	if err2 != nil {
-		fmt.Printf("Error while starting server: %v\n", err2)
-		return err2
-	}
+	gochatutil.CheckError(err2)
 	fmt.Printf("Listening on address %v\n", cs.Address.String())
 	for {
 		conn, _ := listener.Accept()
+		cs.addClient(conn)
 		fmt.Printf("Accepted connection from %v !\n", conn.RemoteAddr().String())
-		go handleConnection(conn)
+		go cs.handleConnection(conn)
 	}
 }
 
-func handleConnection(conn net.Conn) {
+// addClient: Adds a client to a chat server
+func (cs *ChatServer) addClient(conn net.Conn) {
+	cs.Clients = append(cs.Clients, conn)
+}
+
+func (cs *ChatServer) ReadMessage(conn net.Conn) (gochat.ChatMessage, error) {
+	buf := make([]byte, 1024)
+	readBytes, err := bufio.NewReader(conn).Read(buf)
+	if gochatutil.CheckError(err) {
+		return "", err
+	}
+	var receivedMsg = new(gochat.ChatMessage)
+	err2 := proto.Unmarshal(buf[:readBytes], receivedMsg)
+	if gochatutil.CheckError(err2) {
+		return "", err
+	}
+	fmt.Printf("Read: %v from %v on %v\n", receivedMsg.GetContent(), receivedMsg.GetSender(), conn.RemoteAddr())
+	return receivedMsg, nil
+}
+
+func (cs *ChatServer) SendResponse(conn net.Conn, msg gochat.ChatMessage) {
+	sender := "server"
+	sendTime := uint64(time.Now().Unix())
+	fmt.Printf("Sending response: %s\n", msg)
+	var response = gochat.ChatMessage{
+		Sender:   &sender,
+		SendTime: &sendTime,
+		Content:  &msg,
+	}
+	msgBytes, err3 := proto.Marshal(&response)
+	if gochatutil.CheckError(err3) {
+		return
+	}
+	_, err4 := conn.Write(msgBytes)
+	if gochatutil.CheckError(err4) {
+		return
+	}
+}
+
+// handleConnection: reads requests from clients and sends responses
+func (cs *ChatServer) handleConnection(conn net.Conn) {
 	defer conn.Close()
 	for {
-		buf := make([]byte, 1024)
-		readBytes, err := bufio.NewReader(conn).Read(buf)
-		//sz, err := binary.ReadVarint(input)
+		receivedMsg, err := cs.ReadMessage(conn)
 		if err != nil {
-			fmt.Printf("lost connection with %v\n", conn.RemoteAddr())
 			return
 		}
-		var receivedMsg = new(gochat.ChatMessage)
-		err2 := proto.Unmarshal(buf[:readBytes], receivedMsg)
-		if err2 != nil {
-			log.Fatal("unmarshaling error: ", err2)
-		}
-		fmt.Printf("Read: %v from %v on %v\n", receivedMsg.GetContent(), receivedMsg.GetSender(), conn.RemoteAddr())
-		newMsg := strings.ToUpper(receivedMsg.GetContent())
-		conn.Write([]byte(newMsg + "\n"))
+		newMsg := strings.ToUpper(receivedMsg)
+		cs.SendResponse(conn, newMsg)
 	}
 }
 
@@ -67,8 +95,6 @@ func parseAddress(addr string, port string) (*net.TCPAddr, error) {
 		addrBuf.WriteString(addr)
 	}
 	addrBuf.WriteString(":")
-	/*portBuf := make([]byte, 4)
-	binary.LittleEndian.PutUint32(portBuf, port)*/
 	addrBuf.WriteString(port)
 	return net.ResolveTCPAddr("tcp", addrBuf.String())
 }

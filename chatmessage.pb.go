@@ -26,6 +26,7 @@ type ChatMessage struct {
 	Sender           *string `protobuf:"bytes,1,req,name=sender" json:"sender,omitempty"`
 	SendTime         *uint64 `protobuf:"varint,2,req,name=send_time" json:"send_time,omitempty"`
 	Content          *string `protobuf:"bytes,3,req,name=content" json:"content,omitempty"`
+	Target           *string `protobuf:"bytes,4,opt,name=target" json:"target,omitempty"`
 	XXX_unrecognized []byte  `json:"-"`
 }
 
@@ -50,6 +51,13 @@ func (m *ChatMessage) GetSendTime() uint64 {
 func (m *ChatMessage) GetContent() string {
 	if m != nil && m.Content != nil {
 		return *m.Content
+	}
+	return ""
+}
+
+func (m *ChatMessage) GetTarget() string {
+	if m != nil && m.Target != nil {
+		return *m.Target
 	}
 	return ""
 }
