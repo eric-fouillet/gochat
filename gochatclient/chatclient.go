@@ -1,3 +1,6 @@
+// A chat client library.
+// Provides methods to connect to a server and send messages
+
 package main
 
 import (
@@ -20,9 +23,14 @@ type ChatClient struct {
 	TargetPort string
 }
 
+// Message used for the first login
+const LOGIN_MESSAGE string = "GOCHATLOGIN\n"
+
 // Chat client
-// Connect to the host and port given in parameters
-// and start reading from stdin some text to send
+// Connect to the host and port given in parameters.
+// If not provided, the default server URL is localhost:8083.
+// After connection, starts reading from stdin some text to send,
+// and prints messages received from the server.
 func main() {
 	host := flag.String("host", "localhost", "The host to connect to")
 	port := flag.String("port", "8083", "The port to connect to")
@@ -35,20 +43,35 @@ func main() {
 	chatClient := ChatClient{username[:len(username)-1], *host, *port}
 	conn, _ := chatClient.Connect(*host, *port)
 	defer conn.Close()
+
+	// Start receiving messages in a separate goroutine
+	go chatClient.WaitForResponses(conn)
+
+	// Read from stdin messages to send
 	for {
-		fmt.Print("Enter text to send: ")
+		fmt.Printf("%v> ", chatClient.Username)
 		msg, err3 := bufio.NewReader(os.Stdin).ReadString('\n')
 		if gochatutil.CheckError(err3) {
 			return
 		}
-		if msg == "exit\n" {
+		if msg == "/exit\n" {
 			return
 		}
 		chatClient.SendMessage(msg, conn)
-		chatClient.ReadResponse(conn)
 	}
 }
 
+// Read responses from the server
+func (cc *ChatClient) WaitForResponses(conn net.Conn) {
+	for {
+		msg, err := cc.readResponse(conn)
+		if !gochatutil.CheckError(err) {
+			fmt.Printf("\n%v> %v\n%v> ", msg.GetSender(), msg.GetContent(), cc.Username)
+		}
+	}
+}
+
+// Connect to a server running at the given host and port
 func (cc *ChatClient) Connect(host string, port string) (net.Conn, error) {
 	addr, err := net.ResolveTCPAddr("tcp", string(host+":"+port))
 	if gochatutil.CheckError(err) {
@@ -58,6 +81,7 @@ func (cc *ChatClient) Connect(host string, port string) (net.Conn, error) {
 	if gochatutil.CheckError(err2) {
 		return nil, err2
 	}
+	cc.SendMessage(LOGIN_MESSAGE, conn)
 	return conn, nil
 }
 
@@ -79,16 +103,14 @@ func (cc *ChatClient) SendMessage(msg string, conn net.Conn) {
 	}
 }
 
-func (cc *ChatClient) ReadResponse(conn net.Conn) {
+// Read a message from the server
+func (cc *ChatClient) readResponse(conn net.Conn) (*gochat.ChatMessage, error) {
 	buf := make([]byte, 1024)
 	readBytes, err := bufio.NewReader(conn).Read(buf)
 	if gochatutil.CheckError(err) {
-		return
+		return nil, err
 	}
 	var returnMsg = new(gochat.ChatMessage)
 	err2 := proto.Unmarshal(buf[:readBytes], returnMsg)
-	if gochatutil.CheckError(err2) {
-		return
-	}
-	fmt.Printf("Received: %v\n", returnMsg.GetContent())
+	return returnMsg, err2
 }
