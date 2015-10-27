@@ -31,11 +31,6 @@ type ServerClient struct {
 	Messages chan gochat.ChatMessage
 }
 
-// Checks whether 2 Clients are equal
-func (c *ServerClient) Equal(other *ServerClient) bool {
-	return bytes.Equal([]byte(c.Username), []byte(other.Username)) && c.Conn == other.Conn
-}
-
 // Message used for the first login
 const LOGIN_MESSAGE string = "GOCHATLOGIN"
 
@@ -63,6 +58,7 @@ func (cs *ChatServer) Start(addr string, port string) (err error) {
 	for {
 		log.Println("Waiting for connections ...")
 		conn, _ := listener.Accept()
+		defer conn.Close()
 		log.Printf("Accepted connection from %v !\n", conn.RemoteAddr().String())
 		go cs.handleConnection(conn)
 	}
@@ -70,29 +66,38 @@ func (cs *ChatServer) Start(addr string, port string) (err error) {
 
 // handleConnection: reads requests from clients and sends responses
 func (cs *ChatServer) handleConnection(conn net.Conn) {
-	defer conn.Close()
-	for {
-		receivedMsg, err := cs.ReadMessage(conn)
-		if gochatutil.CheckError(err) {
-			break
-		}
-		log.Println("Starting goroutines")
-		go cs.ReceiveMessages(conn)
-		client := cs.newClient(receivedMsg, conn)
-		go client.SendMessages()
+	// Receive the first login message
+	receivedMsg, err := cs.ReadMessage(conn)
+	if gochatutil.CheckError(err) {
+		return
 	}
-	log.Printf("Closing connection from %v\n", conn.RemoteAddr())
+	// Add the client to the list of clients
+	client := cs.newClient(receivedMsg, conn)
+	cs.printClients()
+	go cs.ReceiveMessages(conn)
+	go client.SendMessages()
+}
+
+func (cs *ChatServer) printClients() {
+	i := 0
+	log.Println("List of connected clients")
+	log.Println("======================================")
+	for curr := cs.Clients.Front(); curr != nil; curr = curr.Next() {
+		client := curr.Value.(*ServerClient)
+		log.Printf("Client %v: %v (%v)\n", i, client.Username, client.Conn.RemoteAddr())
+		i++
+	}
+	log.Println("======================================")
 }
 
 // Receive a message on a given connection, and enqueue it
 func (cs *ChatServer) ReceiveMessages(conn net.Conn) {
-	log.Println("Waiting from messages to receive")
 	for {
 		receivedMsg, err := cs.ReadMessage(conn)
 		if gochatutil.CheckError(err) {
 			break
 		}
-		log.Println("Received a message: add it to the server channel")
+		log.Println("ReceiveMessages: Received a message: add it to the server channel")
 		cs.Messages <- *receivedMsg
 	}
 }
@@ -100,12 +105,11 @@ func (cs *ChatServer) ReceiveMessages(conn net.Conn) {
 // Dispatch received messages to the appropriate clients
 func (cs *ChatServer) DispatchMessages() {
 	for {
-		log.Println("Waiting for messages to dispatch")
 		receiveMsg := <-cs.Messages
-		log.Println("Took a message from the server channel, and send it to other clients")
 		for current := cs.Clients.Front(); current != nil; current = current.Next() {
-			currentClient := current.Value.(ServerClient)
+			currentClient := current.Value.(*ServerClient)
 			if currentClient.Username != receiveMsg.GetSender() {
+				log.Printf("Dispatch: sending to client : %v(%v)\n", currentClient.Username, currentClient.Conn.RemoteAddr())
 				currentClient.Messages <- receiveMsg
 			}
 		}
@@ -114,10 +118,11 @@ func (cs *ChatServer) DispatchMessages() {
 
 // Send a message on a client connection
 func (sc *ServerClient) SendMessages() {
-	log.Println("Waiting for messages to send")
-	msg := <-sc.Messages
-	log.Println("Take a message from the client channel, and send it")
-	sc.SendMessage(msg.GetSender(), msg.GetContent())
+	for {
+		msg := <-sc.Messages
+		log.Printf("(%v) SendMessages: Took a message from the client channel, and will send it\n", sc.Username)
+		sc.SendMessage(msg.GetSender(), msg.GetContent())
+	}
 }
 
 // setClient: Adds a client to a chat server
@@ -134,9 +139,7 @@ func (cs *ChatServer) newClient(loginMsg *gochat.ChatMessage, conn net.Conn) *Se
 		SendTime: &sendTime,
 		Content:  &msg,
 	}
-	log.Printf("Adding message %v to the server queue", msg)
 	cs.Messages <- response
-	log.Println("AFTER")
 	return newClient
 }
 
@@ -156,6 +159,7 @@ func (cs *ChatServer) ReadMessage(conn net.Conn) (*gochat.ChatMessage, error) {
 }
 
 func (sc *ServerClient) SendMessage(from string, msg string) {
+	log.Printf("(%v) Sending message from %v: [%v]", sc.Username, from, msg)
 	sendTime := uint64(time.Now().Unix())
 	var response = gochat.ChatMessage{
 		Sender:   &from,
