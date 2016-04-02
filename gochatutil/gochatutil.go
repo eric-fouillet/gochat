@@ -1,4 +1,6 @@
-// Simple util methods, such as error checking
+/*
+Simple util methods, such as error checking
+*/
 
 package gochatutil
 
@@ -7,12 +9,12 @@ import (
 	"os"
 )
 
-type Err_code int
+type ErrCode int
 
 const (
-	_            Err_code = iota
-	ERR_CONTINUE Err_code = iota
-	ERR_STOP     Err_code = iota
+	_            ErrCode = iota
+	ERR_CONTINUE ErrCode = iota
+	ERR_STOP     ErrCode = iota
 )
 
 func CheckError(err error) bool {
@@ -21,7 +23,7 @@ func CheckError(err error) bool {
 
 // CheckErrorAndAct checks if there has been an error
 // and perform the action
-func CheckErrorAndAct(err error, action Err_code) bool {
+func CheckErrorAndAct(err error, action ErrCode) bool {
 	if err != nil {
 		log.Printf("Error %v\n", err)
 		switch action {

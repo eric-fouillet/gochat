@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"container/list"
 	"flag"
 	"fmt"
@@ -11,13 +10,20 @@ import (
 	"time"
 
 	"github.com/eric-fouillet/gochat"
-	"github.com/eric-fouillet/gochat/gochatutil"
 	"github.com/golang/protobuf/proto"
 )
 
+var host string
+var port string
+
+func init() {
+	flag.StringVar(&host, "host", "localhost", "The host to listen on")
+	flag.StringVar(&port, "port", "8083", "The port to listen on")
+}
+
 // ChatServer represents a chat server
 type ChatServer struct {
-	Address  *net.TCPAddr
+	Address  string
 	Name     string
 	BindAddr net.TCPAddr
 	Clients  *list.List // List of ServerClient
@@ -34,30 +40,27 @@ type ServerClient struct {
 // Message used for the first login
 const LOGIN_MESSAGE string = "GOCHATLOGIN"
 
-// Transform a host and port into a net.TCPAddr
-func (cs *ChatServer) parseAddress(addr string, port string) (*net.TCPAddr, error) {
-	var addrBuf bytes.Buffer
-	if addr != "" {
-		addrBuf.WriteString(addr)
-	}
-	addrBuf.WriteString(":")
-	addrBuf.WriteString(port)
-	return net.ResolveTCPAddr("tcp", addrBuf.String())
-}
-
-// Starts listening on the address and port given in parameters
+// Start starts listening on the address and port given in parameters
 func (cs *ChatServer) Start(addr string, port string) (err error) {
-	cs.Address, err = cs.parseAddress(addr, port)
-	gochatutil.CheckError(err)
+	cs.Address = addr + ":" + port
+	tcpAddr, err := net.ResolveTCPAddr("tcp", cs.Address)
+	if err != nil {
+		log.Fatal("Could not resolve address", cs.Address)
+	}
 	cs.Clients = list.New()
 	cs.Messages = make(chan gochat.ChatMessage)
-	listener, err2 := net.ListenTCP("tcp", cs.Address)
-	gochatutil.CheckError(err2)
-	log.Printf("Listening on address %v\n", cs.Address.String())
+	listener, err := net.ListenTCP("tcp", tcpAddr)
+	if err != nil {
+		log.Fatal("Could not listen on address ", cs.Address)
+	}
+	log.Printf("Listening on address %v\n", cs.Address)
 	go cs.DispatchMessages()
 	for {
 		log.Println("Waiting for connections ...")
-		conn, _ := listener.Accept()
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Fatal("Unable to accept connections on address", cs.Address)
+		}
 		defer conn.Close()
 		log.Printf("Accepted connection from %v !\n", conn.RemoteAddr().String())
 		go cs.handleConnection(conn)
@@ -68,7 +71,8 @@ func (cs *ChatServer) Start(addr string, port string) (err error) {
 func (cs *ChatServer) handleConnection(conn net.Conn) {
 	// Receive the first login message
 	receivedMsg, err := cs.ReadMessage(conn)
-	if gochatutil.CheckError(err) {
+	if err != nil {
+		log.Println("Error while reading message", err)
 		return
 	}
 	// Add the client to the list of clients
@@ -94,7 +98,8 @@ func (cs *ChatServer) printClients() {
 func (cs *ChatServer) ReceiveMessages(conn net.Conn) {
 	for {
 		receivedMsg, err := cs.ReadMessage(conn)
-		if gochatutil.CheckError(err) {
+		if err != nil {
+			log.Println("Could not process message on connection", conn)
 			break
 		}
 		log.Println("ReceiveMessages: Received a message: add it to the server channel")
@@ -146,12 +151,11 @@ func (cs *ChatServer) newClient(loginMsg *gochat.ChatMessage, conn net.Conn) *Se
 func (cs *ChatServer) ReadMessage(conn net.Conn) (*gochat.ChatMessage, error) {
 	buf := make([]byte, 1024)
 	readBytes, err := bufio.NewReader(conn).Read(buf)
-	if gochatutil.CheckError(err) {
+	if err != nil {
 		return nil, err
 	}
 	var receivedMsg = new(gochat.ChatMessage)
-	err2 := proto.Unmarshal(buf[:readBytes], receivedMsg)
-	if gochatutil.CheckError(err2) {
+	if err := proto.Unmarshal(buf[:readBytes], receivedMsg); err != nil {
 		return nil, err
 	}
 	log.Printf("Read: %v from %v on %v\n", receivedMsg.GetContent(), receivedMsg.GetSender(), conn.RemoteAddr())
@@ -166,20 +170,19 @@ func (sc *ServerClient) SendMessage(from string, msg string) {
 		SendTime: &sendTime,
 		Content:  &msg,
 	}
-	msgBytes, err3 := proto.Marshal(&response)
-	if gochatutil.CheckError(err3) {
+	msgBytes, err := proto.Marshal(&response)
+	if err != nil {
+		log.Println("Could not marshal response", err)
 		return
 	}
-	_, err4 := sc.Conn.Write(msgBytes)
-	if gochatutil.CheckError(err4) {
+	if _, err := sc.Conn.Write(msgBytes); err != nil {
+		log.Printf("Could not write message %v from %v", msg, from)
 		return
 	}
 }
 
 func main() {
-	host := flag.String("host", "localhost", "The host to listen on")
-	port := flag.String("port", "8083", "The port to listen on")
 	flag.Parse()
 	cs := ChatServer{}
-	cs.Start(*host, *port)
+	cs.Start(host, port)
 }
