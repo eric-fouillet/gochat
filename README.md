@@ -1,13 +1,16 @@
 # gochat
 
 ## Introduction
-Gochat is a small chat client and server in Go, for practice only.
+
+Gochat is a small IRC-like chat client and server in Go, for practice only. Multiple clients connect to a single server and can chat in a unique channel.
 
 It uses [protobuf](https://github.com/google/protobuf) to serialize the messages.
 
 ## Installation
 
 Use `go get`, or clone the repository and install `gochatutil`, `gochatclient` and `gochatserver` separately with `go install`.
+
+both `gochatserver` and `gochatclient` accept host and port command line variables, for example: `gochaclient -host localhost -port 8081`.
 
 ## Dependencies
 
