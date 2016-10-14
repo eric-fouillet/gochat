@@ -9,7 +9,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/eric-fouillet/gochat"
+	"github.com/ericfouillet/gochat"
 	"github.com/golang/protobuf/proto"
 )
 
