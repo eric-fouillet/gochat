@@ -1,7 +1,18 @@
 # gochat
 
-A small chat client and server in Go, for practice only.
+## Introduction
+Gochat is a small chat client and server in Go, for practice only.
 
-Uses protobuf to serialize the message.
+It uses [protobuf](https://github.com/google/protobuf) to serialize the messages.
 
-TODO: client reconnection in case of connection loss
+## Installation
+
+Use `go get`, or clone the repository and install `gochatutil`, `gochatclient` and `gochatserver` separately with `go install`.
+
+## Dependencies
+
+Only Go is required. The compiled source protobuf file is already included in project.
+
+## TODO list
+
+- Client reconnection in case of connection loss
