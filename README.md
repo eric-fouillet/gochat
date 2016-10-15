@@ -8,7 +8,7 @@ It uses [protobuf](https://github.com/google/protobuf) to serialize the messages
 
 ## Installation
 
-Use `go get`, or clone the repository and install `gochatutil`, `gochatclient` and `gochatserver` separately with `go install`.
+Use `go get`, or clone the repository and install `gochatclient` and `gochatserver` separately with `go install`.
 
 Both `gochatserver` and `gochatclient` accept host and port command line variables, for example: `gochaclient -host localhost -port 8081`.
 
